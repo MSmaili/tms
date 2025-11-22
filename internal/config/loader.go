@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+//todo: what about panes?
+
 type Loader interface {
 	Load() (*Config, error)
 }
@@ -31,11 +33,11 @@ func (l *FileLoader) Load() (*Config, error) {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
 
-	if err = l.validate(&raw); err != nil {
+	if err = validate(&raw); err != nil {
 		return nil, err
 	}
 
-	normalized, err := l.normalize(&raw)
+	normalized, err := normalize(&raw)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +46,7 @@ func (l *FileLoader) Load() (*Config, error) {
 
 }
 
-func (l *FileLoader) validate(cfg *Config) error {
+func validate(cfg *Config) error {
 	if cfg.Sessions == nil {
 		return fmt.Errorf("sessions block missing")
 	}
@@ -66,7 +68,7 @@ func (l *FileLoader) validate(cfg *Config) error {
 	return nil
 }
 
-func (l *FileLoader) normalize(cfg *Config) (*Config, error) {
+func normalize(cfg *Config) (*Config, error) {
 	out := &Config{Sessions: map[string]WindowList{}}
 
 	for name, windows := range cfg.Sessions {
@@ -92,4 +94,23 @@ func expandPath(p string) string {
 		return filepath.Join(home, strings.TrimPrefix(p, "~"))
 	}
 	return p
+}
+
+func loadFromMemory(data []byte) (*Config, error) {
+	var raw Config
+
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("parse config: %w", err)
+	}
+
+	if err := validate(&raw); err != nil {
+		return nil, err
+	}
+
+	normalized, err := normalize(&raw)
+	if err != nil {
+		return nil, err
+	}
+
+	return normalized, nil
 }
