@@ -1,130 +1,79 @@
 package state
 
-import (
-	"fmt"
+type windowKey struct {
+	Name string
+	Path string
+}
 
-	"github.com/MSmaili/tms/internal/domain"
-)
+func compareWindows(diff *Diff, desired, actual *State) {
+	common := CommonSessions(desired, actual)
 
-func compareWindows(diff *domain.Diff, desired, actual map[string][]domain.Window, mode domain.CompareMode) *domain.Diff {
-	for session, desiredWindows := range desired {
-		processSession(diff, session, desiredWindows, actual[session], mode)
-	}
+	for _, sessionName := range common {
+		desiredSession := desired.Sessions[sessionName]
+		actualSession := actual.Sessions[sessionName]
 
-	//missing session windows
-	for session, actualWindows := range actual {
-		_, ok := desired[session]
-		if !ok {
-			diff.ExtraWindows[session] = append(diff.ExtraWindows[session], actualWindows...)
+		windowDiff := compareSessionWindows(desiredSession.Windows, actualSession.Windows)
+		if !windowDiff.IsEmpty() {
+			diff.Windows[sessionName] = windowDiff
 		}
 	}
 
-	return diff
-}
-
-func processSession(diff *domain.Diff, session string, desiredWindows []domain.Window, actualWindows []domain.Window, mode domain.CompareMode) {
-
-	desiredMap := windowsKey(desiredWindows)
-	actualMap := windowsKey(actualWindows)
-
-	missing := missingWindows(desiredMap, actualMap)
-	mismatched := mismatchedWindows(desiredMap, actualMap, mode)
-	extra := extraWindows(desiredMap, actualMap)
-
-	if len(missing) > 0 {
-		diff.MissingWindows[session] = missing
-	}
-
-	if len(mismatched) > 0 {
-		diff.Mismatched[session] = mismatched
-	}
-
-	if len(extra) > 0 {
-		diff.ExtraWindows[session] = extra
-	}
-}
-
-func missingWindows(desiredMap, actualMap map[string]domain.Window) []domain.Window {
-	var missing []domain.Window
-
-	for key, dw := range desiredMap {
-		_, exist := actualMap[key]
-		if !exist {
-			missing = append(missing, dw)
+	for _, sessionName := range diff.Sessions.Missing {
+		session := desired.Sessions[sessionName]
+		if len(session.Windows) > 0 {
+			diff.Windows[sessionName] = ItemDiff[Window]{Missing: cloneWindows(session.Windows)}
 		}
 	}
-	return missing
 }
 
-func mismatchedWindows(desiredMap, actualMap map[string]domain.Window, mode domain.CompareMode) []domain.WindowMismatch {
-	var mismatched []domain.WindowMismatch
+func compareSessionWindows(desired, actual []*Window) ItemDiff[Window] {
+	desiredMap := windowsByKey(desired)
+	actualMap := windowsByKey(actual)
 
-	for key, dw := range desiredMap {
-		aw, ok := actualMap[key]
-		if !ok {
-			continue // handled as missing
-		}
-		if !windowsEqual(dw, aw, mode) {
-			mismatched = append(mismatched, domain.WindowMismatch{
-				Actual:  aw,
-				Desired: dw,
-			})
+	windowDiff := ItemDiff[Window]{
+		Missing:    make([]Window, 0, len(desired)),
+		Extra:      make([]Window, 0, len(actual)),
+		Mismatched: make([]Mismatch[Window], 0),
+	}
+
+	for key, desiredWindow := range desiredMap {
+		actualWindow, exists := actualMap[key]
+		if !exists {
+			windowDiff.Missing = append(windowDiff.Missing, *desiredWindow)
+		} else {
+			if !windowsMatch(desiredWindow, actualWindow) {
+				windowDiff.Mismatched = append(windowDiff.Mismatched, Mismatch[Window]{
+					Desired: *desiredWindow,
+					Actual:  *actualWindow,
+				})
+			}
+			delete(actualMap, key)
 		}
 	}
 
-	return mismatched
-}
-
-func extraWindows(desiredMap, actualMap map[string]domain.Window) []domain.Window {
-	var extraWindows []domain.Window
-
-	for key, aw := range actualMap {
-		_, exist := desiredMap[key]
-		if !exist {
-			extraWindows = append(extraWindows, aw)
-		}
+	for _, actualWindow := range actualMap {
+		windowDiff.Extra = append(windowDiff.Extra, *actualWindow)
 	}
-	return extraWindows
+
+	return windowDiff
 }
 
-func windowsKey(windows []domain.Window) map[string]domain.Window {
-	m := make(map[string]domain.Window, len(windows))
+func windowsMatch(desired, actual *Window) bool {
+	return len(desired.Panes) == len(actual.Panes)
+}
+
+func windowsByKey(windows []*Window) map[windowKey]*Window {
+	m := make(map[windowKey]*Window, len(windows))
 	for _, w := range windows {
-		key := windowKey(w)
-		m[key] = w
+		m[windowKey{w.Name, w.Path}] = w
 	}
 	return m
 }
 
-func windowKey(w domain.Window) string {
-	return fmt.Sprintf("%s|%s", w.Name, w.Path)
-}
-
-func windowsEqual(w1, w2 domain.Window, mode domain.CompareMode) bool {
-	if mode&domain.CompareIgnoreName == 0 && w1.Name != w2.Name {
-		return false
+func cloneWindows(ws []*Window) []Window {
+	out := make([]Window, len(ws))
+	for i, w := range ws {
+		out[i] = *w
 	}
-	if mode&domain.CompareIgnorePath == 0 && w1.Path != w2.Path {
-		return false
-	}
-	if mode&domain.CompareIgnoreIndex == 0 && !intPtrEqual(w1.Index, w2.Index) {
-		return false
-	}
-	if mode&domain.CompareIgnoreLayout == 0 && w1.Layout != w2.Layout {
-		return false
-	}
-	if mode&domain.CompareIgnoreCommand == 0 && w1.Command != w2.Command {
-		return false
-	}
-	return true
-}
-
-func intPtrEqual(a, b *int) bool {
-	if a == b {
-		return true // covers both nil
-	}
-	if a == nil || b == nil {
-		return false
-	}
-	return *a == *b
+	return out
 }

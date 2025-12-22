@@ -1,26 +1,25 @@
 package state
 
-import (
-	"github.com/MSmaili/tms/internal/domain"
-)
-
-func compareSessions(diff *domain.Diff, desired, actual map[string][]domain.Window) *domain.Diff {
-
-	for session := range desired {
-		_, ok := actual[session]
-		if !ok {
-			diff.MissingSessions = append(diff.MissingSessions, session)
-		} else {
-			diff.CommonSessions = append(diff.CommonSessions, session)
+func compareSessions(diff *Diff, desired, actual *State) {
+	for name := range desired.Sessions {
+		if _, ok := actual.Sessions[name]; !ok {
+			diff.Sessions.Missing = append(diff.Sessions.Missing, name)
 		}
 	}
 
-	for session := range actual {
-		_, ok := desired[session]
-		if !ok {
-			diff.ExtraSessions = append(diff.ExtraSessions, session)
+	for name := range actual.Sessions {
+		if _, ok := desired.Sessions[name]; !ok {
+			diff.Sessions.Extra = append(diff.Sessions.Extra, name)
 		}
 	}
+}
 
-	return diff
+func CommonSessions(desired, actual *State) []string {
+	common := make([]string, 0, len(desired.Sessions))
+	for name := range desired.Sessions {
+		if _, exists := actual.Sessions[name]; exists {
+			common = append(common, name)
+		}
+	}
+	return common
 }

@@ -3,142 +3,125 @@ package state
 import (
 	"testing"
 
-	"github.com/MSmaili/tms/internal/domain"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestWindowsEqual(t *testing.T) {
-	t.Helper()
+func TestCompareWindows(t *testing.T) {
+	desired := &State{Sessions: map[string]*Session{
+		"s": {
+			Name: "s",
+			Windows: []*Window{
+				{Name: "A", Path: "/A"},
+				{Name: "B", Path: "/B"},
+				{Name: "C", Path: "/C"},
+			},
+		},
+	}}
 
-	i1 := 1
-	i2 := 2
+	actual := &State{Sessions: map[string]*Session{
+		"s": {
+			Name: "s",
+			Windows: []*Window{
+				{Name: "A", Path: "/A-changed"}, // different path = missing + extra
+				{Name: "C", Path: "/C"},         // match
+				{Name: "D", Path: "/D"},         // extra
+			},
+		},
+	}}
 
-	tests := []struct {
-		name string
-		a, b domain.Window
-		want bool
-	}{
-		{
-			name: "Equal windows",
-			a:    domain.Window{Name: "a", Path: "/x", Index: &i1, Layout: "h", Command: "ls"},
-			b:    domain.Window{Name: "a", Path: "/x", Index: &i1, Layout: "h", Command: "ls"},
-			want: true,
-		},
-		{
-			name: "Different name",
-			a:    domain.Window{Name: "a", Path: "/x"},
-			b:    domain.Window{Name: "b", Path: "/x"},
-			want: false,
-		},
-		{
-			name: "Different path",
-			a:    domain.Window{Name: "a", Path: "/x"},
-			b:    domain.Window{Name: "a", Path: "/y"},
-			want: false,
-		},
-		{
-			name: "Different index pointer values",
-			a:    domain.Window{Index: &i1},
-			b:    domain.Window{Index: &i2},
-			want: false,
-		},
-		{
-			name: "One index nil, one not",
-			a:    domain.Window{Index: nil},
-			b:    domain.Window{Index: &i1},
-			want: false,
-		},
-		{
-			name: "Both index nil",
-			a:    domain.Window{Index: nil},
-			b:    domain.Window{Index: nil},
-			want: true,
-		},
-		{
-			name: "Different layout",
-			a:    domain.Window{Layout: "h"},
-			b:    domain.Window{Layout: "v"},
-			want: false,
-		},
-		{
-			name: "Different command",
-			a:    domain.Window{Command: "ls"},
-			b:    domain.Window{Command: "top"},
-			want: false,
-		},
-	}
+	diff := Compare(desired, actual)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, windowsEqual(tt.a, tt.b, domain.CompareStrict))
-		})
-	}
+	// A|/A is missing (desired but not in actual)
+	// B|/B is missing
+	assert.Len(t, diff.Windows["s"].Missing, 2)
+
+	// A|/A-changed is extra
+	// D|/D is extra
+	assert.Len(t, diff.Windows["s"].Extra, 2)
+
+	// No mismatches since key includes path
+	assert.Empty(t, diff.Windows["s"].Mismatched)
 }
 
-func TestCompareMixedDiffInSameSession(t *testing.T) {
-	desired := map[string][]domain.Window{
+func TestCompareWindowsDuplicateNames(t *testing.T) {
+	// tmux allows duplicate window names
+	desired := &State{Sessions: map[string]*Session{
 		"s": {
-			{Name: "A", Path: "/A"}, // MISMATCHED
-			{Name: "B", Path: "/B"}, // MISSING
-			{Name: "C", Path: "/C"}, // MATCH
+			Name: "s",
+			Windows: []*Window{
+				{Name: "editor", Path: "/project1"},
+				{Name: "editor", Path: "/project2"},
+			},
 		},
-	}
-	actual := map[string][]domain.Window{
+	}}
+
+	actual := &State{Sessions: map[string]*Session{
 		"s": {
-			{Name: "A", Path: "/A", Command: "git status"}, // mismatched
-			{Name: "C", Path: "/C"},                        // match
-			{Name: "D", Path: "/D"},                        // extra
+			Name: "s",
+			Windows: []*Window{
+				{Name: "editor", Path: "/project1"},
+			},
 		},
-	}
+	}}
 
-	diff := Compare(desired, actual, domain.CompareStrict)
+	diff := Compare(desired, actual)
 
-	assert.Len(t, diff.MissingWindows["s"], 1)
-	assert.Equal(t, "B", diff.MissingWindows["s"][0].Name)
-
-	assert.Len(t, diff.Mismatched["s"], 1)
-	assert.Equal(t, "A", diff.Mismatched["s"][0].Desired.Name)
-	assert.Equal(t, "A", diff.Mismatched["s"][0].Actual.Name)
-	assert.Equal(t, "", diff.Mismatched["s"][0].Desired.Command)
-
-	assert.Len(t, diff.ExtraWindows["s"], 1)
-	assert.Equal(t, "D", diff.ExtraWindows["s"][0].Name)
+	// editor|/project2 is missing
+	assert.Len(t, diff.Windows["s"].Missing, 1)
+	assert.Equal(t, "/project2", diff.Windows["s"].Missing[0].Path)
 }
 
-func TestCompareKeyCollisionOverridesEarlier(t *testing.T) {
-	desired := map[string][]domain.Window{
+func TestCompareWindowsMismatchedPaneCount(t *testing.T) {
+	desired := &State{Sessions: map[string]*Session{
 		"s": {
-			{Name: "first", Path: "/collision"},
-			{Name: "first", Path: "/collision"}, // overrides first
+			Name: "s",
+			Windows: []*Window{
+				{
+					Name:  "editor",
+					Path:  "/home",
+					Panes: []*Pane{{Path: "/a"}, {Path: "/b"}, {Path: "/c"}},
+				},
+			},
 		},
-	}
-	actual := map[string][]domain.Window{
-		"s": {},
-	}
+	}}
 
-	diff := Compare(desired, actual, domain.CompareStrict)
+	actual := &State{Sessions: map[string]*Session{
+		"s": {
+			Name: "s",
+			Windows: []*Window{
+				{
+					Name:  "editor",
+					Path:  "/home",
+					Panes: []*Pane{{Path: "/x"}},
+				},
+			},
+		},
+	}}
 
-	// Only the last one should appear due to map override.
-	assert.Len(t, diff.MissingWindows["s"], 1)
-	assert.Equal(t, "first", diff.MissingWindows["s"][0].Name)
+	diff := Compare(desired, actual)
+
+	assert.Empty(t, diff.Windows["s"].Missing)
+	assert.Empty(t, diff.Windows["s"].Extra)
+	assert.Len(t, diff.Windows["s"].Mismatched, 1)
+	assert.Equal(t, 3, len(diff.Windows["s"].Mismatched[0].Desired.Panes))
+	assert.Equal(t, 1, len(diff.Windows["s"].Mismatched[0].Actual.Panes))
 }
 
-func TestCompareMultipleMissingExtra(t *testing.T) {
-	desired := map[string][]domain.Window{
-		"s": {
-			{Name: "A", Path: "/A"},
-			{Name: "B", Path: "/B"},
+func TestCompareWindowsForMissingSession(t *testing.T) {
+	desired := &State{Sessions: map[string]*Session{
+		"new-session": {
+			Name: "new-session",
+			Windows: []*Window{
+				{Name: "win1", Path: "/path1"},
+				{Name: "win2", Path: "/path2"},
+			},
 		},
-	}
-	actual := map[string][]domain.Window{
-		"s": {
-			{Name: "C", Path: "/C"},
-			{Name: "D", Path: "/D"},
-		},
-	}
+	}}
 
-	diff := Compare(desired, actual, domain.CompareStrict)
+	actual := NewState()
 
-	assert.Len(t, diff.MissingWindows["s"], 2)
-	assert.Len(t, diff.ExtraWindows["s"], 2)
+	diff := Compare(desired, actual)
+
+	assert.Contains(t, diff.Sessions.Missing, "new-session")
+	assert.Len(t, diff.Windows["new-session"].Missing, 2)
 }
