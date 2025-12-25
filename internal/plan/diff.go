@@ -1,0 +1,33 @@
+package plan
+
+type Diff struct {
+	Sessions ItemDiff[Session]
+	Windows  map[string]ItemDiff[Window] // key: session|name
+}
+
+type ItemDiff[T any] struct {
+	Missing    []T
+	Extra      []T
+	Mismatched []Mismatch[T]
+}
+
+type Mismatch[T any] struct {
+	Desired T
+	Actual  T
+}
+
+type Session struct {
+	Name    string
+	Windows []Window
+}
+
+type Window struct {
+	Name  string
+	Path  string
+	Panes []Pane
+}
+
+type Pane struct {
+	Path    string
+	Command string
+}
