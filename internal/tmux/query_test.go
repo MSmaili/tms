@@ -84,3 +84,63 @@ func TestListPanesQuery(t *testing.T) {
 		})
 	}
 }
+
+
+func TestLoadStateQuery(t *testing.T) {
+	q := LoadStateQuery{}
+
+	t.Run("args", func(t *testing.T) {
+		assert.Equal(t, []string{"list-panes", "-a", "-F", "#{session_name}|#{window_name}|#{pane_current_path}|#{pane_current_command}"}, q.Args())
+	})
+
+	tests := []struct {
+		name   string
+		output string
+		want   []Session
+	}{
+		{"empty", "", []Session{}},
+		{
+			name:   "single session single window single pane",
+			output: "dev|editor|~/code|vim",
+			want: []Session{{
+				Name: "dev",
+				Windows: []Window{{
+					Name:  "editor",
+					Path:  "~/code",
+					Panes: []Pane{{Path: "~/code", Command: "vim"}},
+				}},
+			}},
+		},
+		{
+			name:   "multiple panes same window",
+			output: "dev|editor|~/code|vim\ndev|editor|~/api|node",
+			want: []Session{{
+				Name: "dev",
+				Windows: []Window{{
+					Name:  "editor",
+					Path:  "~/code",
+					Panes: []Pane{{Path: "~/code", Command: "vim"}, {Path: "~/api", Command: "node"}},
+				}},
+			}},
+		},
+		{
+			name:   "multiple windows",
+			output: "dev|editor|~/code|vim\ndev|server|~/api|node",
+			want: []Session{{
+				Name: "dev",
+				Windows: []Window{
+					{Name: "editor", Path: "~/code", Panes: []Pane{{Path: "~/code", Command: "vim"}}},
+					{Name: "server", Path: "~/api", Panes: []Pane{{Path: "~/api", Command: "node"}}},
+				},
+			}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := q.Parse(tt.output)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
