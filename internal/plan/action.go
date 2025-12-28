@@ -12,12 +12,20 @@ type Action interface {
 }
 
 type CreateSessionAction struct {
-	Name string
-	Path string
+	Name       string
+	WindowName string
+	Path       string
 }
 
 func (a CreateSessionAction) ToCommand() string {
-	return fmt.Sprintf("new-session -d -s %q -c %q", a.Name, a.Path)
+	cmd := fmt.Sprintf("new-session -d -s %q", a.Name)
+	if a.WindowName != "" {
+		cmd += fmt.Sprintf(" -n %q", a.WindowName)
+	}
+	if a.Path != "" {
+		cmd += fmt.Sprintf(" -c %q", a.Path)
+	}
+	return cmd
 }
 
 func (a CreateSessionAction) Comment() string {

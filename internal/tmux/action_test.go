@@ -14,13 +14,13 @@ func TestAction_Args(t *testing.T) {
 	}{
 		{
 			name:   "create session",
-			action: CreateSession{Name: "dev", Path: "~/code"},
-			want:   []string{"new-session", "-d", "-s", "dev", "-c", "~/code"},
+			action: CreateSession{Name: "dev", WindowName: "editor", Path: "~/code"},
+			want:   []string{"new-session", "-d", "-s", "dev", "-n", "editor", "-c", "~/code"},
 		},
 		{
 			name:   "create session no path",
-			action: CreateSession{Name: "dev"},
-			want:   []string{"new-session", "-d", "-s", "dev"},
+			action: CreateSession{Name: "dev", WindowName: "main"},
+			want:   []string{"new-session", "-d", "-s", "dev", "-n", "main"},
 		},
 		{
 			name:   "create window",

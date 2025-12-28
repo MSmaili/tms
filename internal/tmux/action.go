@@ -5,12 +5,16 @@ type Action interface {
 }
 
 type CreateSession struct {
-	Name string
-	Path string
+	Name       string
+	WindowName string
+	Path       string
 }
 
 func (a CreateSession) Args() []string {
 	args := []string{"new-session", "-d", "-s", a.Name}
+	if a.WindowName != "" {
+		args = append(args, "-n", a.WindowName)
+	}
 	if a.Path != "" {
 		args = append(args, "-c", a.Path)
 	}

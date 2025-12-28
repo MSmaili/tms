@@ -61,7 +61,7 @@ func (c *client) ExecuteBatch(actions []Action) error {
 
 	var script strings.Builder
 	for _, action := range actions {
-		script.WriteString(strings.Join(action.Args(), " "))
+		script.WriteString(quoteArgs(action.Args()))
 		script.WriteString("\n")
 	}
 
@@ -76,6 +76,18 @@ func (c *client) ExecuteBatch(actions []Action) error {
 	}
 
 	return nil
+}
+
+func quoteArgs(args []string) string {
+	quoted := make([]string, len(args))
+	for i, arg := range args {
+		if strings.ContainsAny(arg, " \t\"'") {
+			quoted[i] = fmt.Sprintf("%q", arg)
+		} else {
+			quoted[i] = arg
+		}
+	}
+	return strings.Join(quoted, " ")
 }
 
 func (c *client) Attach(session string) error {

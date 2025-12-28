@@ -52,18 +52,18 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	stateDiff := state.Compare(desired, actual)
 
+	paneBaseIndex, _ := tmux.RunQuery(client, tmux.PaneBaseIndexQuery{})
+
 	planDiff := stateDiffToPlanDiff(stateDiff, desired)
-	strategy := &plan.MergeStrategy{}
+	strategy := &plan.MergeStrategy{PaneBaseIndex: paneBaseIndex}
 	p := strategy.Plan(planDiff)
 
 	if p.IsEmpty() {
 		fmt.Println("Workspace already up to date")
 	} else {
 		actions := planActionsToTmuxActions(p.Actions)
-		for _, action := range actions {
-			if err := client.Execute(action); err != nil {
-				return fmt.Errorf("executing action: %w", err)
-			}
+		if err := client.ExecuteBatch(actions); err != nil {
+			return fmt.Errorf("executing plan: %w", err)
 		}
 	}
 
@@ -92,29 +92,18 @@ func manifestToState(ws *manifest.Workspace) *state.State {
 func queryTmuxState(client tmux.Client) (*state.State, error) {
 	s := state.NewState()
 
-	sessions, err := tmux.RunQuery(client, tmux.ListSessionsQuery{})
+	sessions, err := tmux.RunQuery(client, tmux.LoadStateQuery{})
 	if err != nil {
 		return s, nil
 	}
 
 	for _, sess := range sessions {
 		session := s.AddSession(sess.Name)
-
-		windows, err := tmux.RunQuery(client, tmux.ListWindowsQuery{Session: sess.Name})
-		if err != nil {
-			continue
-		}
-
-		for _, w := range windows {
+		for _, w := range sess.Windows {
 			window := &state.Window{Name: w.Name, Path: w.Path}
-
-			panes, err := tmux.RunQuery(client, tmux.ListPanesQuery{Target: fmt.Sprintf("%s:%s", sess.Name, w.Name)})
-			if err == nil {
-				for _, p := range panes {
-					window.Panes = append(window.Panes, &state.Pane{Path: p.Path, Command: p.Command})
-				}
+			for _, p := range w.Panes {
+				window.Panes = append(window.Panes, &state.Pane{Path: p.Path, Command: p.Command})
 			}
-
 			session.Windows = append(session.Windows, window)
 		}
 	}
@@ -191,7 +180,7 @@ func planActionsToTmuxActions(actions []plan.Action) []tmux.Action {
 func planActionToTmuxAction(a plan.Action) tmux.Action {
 	switch action := a.(type) {
 	case plan.CreateSessionAction:
-		return tmux.CreateSession{Name: action.Name, Path: action.Path}
+		return tmux.CreateSession{Name: action.Name, WindowName: action.WindowName, Path: action.Path}
 	case plan.CreateWindowAction:
 		return tmux.CreateWindow{Session: action.Session, Name: action.Name, Path: action.Path}
 	case plan.SplitPaneAction:

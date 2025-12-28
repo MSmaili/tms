@@ -20,7 +20,7 @@ func TestMergeStrategyPlan(t *testing.T) {
 				},
 				Windows: make(map[string]ItemDiff[Window]),
 			},
-			want: []Action{CreateSessionAction{Name: "dev", Path: "~/code"}},
+			want: []Action{CreateSessionAction{Name: "dev", WindowName: "editor", Path: "~/code"}},
 		},
 		{
 			name: "creates missing window",
