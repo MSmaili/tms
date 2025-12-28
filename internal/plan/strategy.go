@@ -93,16 +93,21 @@ func createWindow(plan *Plan, sessionName string, window Window, paneBaseIndex i
 }
 
 func addPanesAndCommands(plan *Plan, sessionName string, window Window, paneBaseIndex int) {
-	if len(window.Panes) == 0 {
-		return
-	}
-
 	target := fmt.Sprintf("%s:%s", sessionName, window.Name)
 
-	for _, pane := range window.Panes[1:] {
-		plan.Actions = append(plan.Actions, SplitPaneAction{
+	if len(window.Panes) > 1 {
+		for _, pane := range window.Panes[1:] {
+			plan.Actions = append(plan.Actions, SplitPaneAction{
+				Target: target,
+				Path:   pane.Path,
+			})
+		}
+	}
+
+	if window.Layout != "" {
+		plan.Actions = append(plan.Actions, SelectLayoutAction{
 			Target: target,
-			Path:   pane.Path,
+			Layout: window.Layout,
 		})
 	}
 

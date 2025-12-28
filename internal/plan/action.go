@@ -137,3 +137,24 @@ func (a KillWindowAction) Validate() error {
 	}
 	return nil
 }
+
+
+type SelectLayoutAction struct {
+	Target string
+	Layout string
+}
+
+func (a SelectLayoutAction) ToCommand() string {
+	return fmt.Sprintf("select-layout -t %q %q", a.Target, a.Layout)
+}
+
+func (a SelectLayoutAction) Comment() string {
+	return fmt.Sprintf("# Set layout: %s -> %s", a.Target, a.Layout)
+}
+
+func (a SelectLayoutAction) Validate() error {
+	if a.Target == "" || a.Layout == "" {
+		return errors.New("select layout target and layout cannot be empty")
+	}
+	return nil
+}

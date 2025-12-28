@@ -72,3 +72,13 @@ type KillWindow struct {
 func (a KillWindow) Args() []string {
 	return []string{"kill-window", "-t", a.Target}
 }
+
+
+type SelectLayout struct {
+	Target string
+	Layout string
+}
+
+func (a SelectLayout) Args() []string {
+	return []string{"select-layout", "-t", a.Target, a.Layout}
+}

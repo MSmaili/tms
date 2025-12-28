@@ -102,7 +102,7 @@ func manifestToState(ws *manifest.Workspace) *state.State {
 			if name == "" {
 				name = fmt.Sprintf("window-%d", i)
 			}
-			window := &state.Window{Name: name, Path: w.Path}
+			window := &state.Window{Name: name, Path: w.Path, Layout: w.Layout}
 			for _, p := range w.Panes {
 				window.Panes = append(window.Panes, &state.Pane{Path: p.Path, Command: p.Command})
 			}
@@ -123,7 +123,7 @@ func queryTmuxState(client tmux.Client) (*state.State, error) {
 	for _, sess := range sessions {
 		session := s.AddSession(sess.Name)
 		for _, w := range sess.Windows {
-			window := &state.Window{Name: w.Name, Path: w.Path}
+			window := &state.Window{Name: w.Name, Path: w.Path, Layout: w.Layout}
 			for _, p := range w.Panes {
 				window.Panes = append(window.Panes, &state.Pane{Path: p.Path, Command: p.Command})
 			}
@@ -143,7 +143,7 @@ func stateDiffToPlanDiff(sd state.Diff, desired *state.State) plan.Diff {
 		session := desired.Sessions[sessionName]
 		ps := plan.Session{Name: sessionName}
 		for _, w := range session.Windows {
-			pw := plan.Window{Name: w.Name, Path: w.Path}
+			pw := plan.Window{Name: w.Name, Path: w.Path, Layout: w.Layout}
 			for _, p := range w.Panes {
 				pw.Panes = append(pw.Panes, plan.Pane{Path: p.Path, Command: p.Command})
 			}
@@ -160,7 +160,7 @@ func stateDiffToPlanDiff(sd state.Diff, desired *state.State) plan.Diff {
 		pwd := plan.ItemDiff[plan.Window]{}
 
 		for _, w := range wd.Missing {
-			pw := plan.Window{Name: w.Name, Path: w.Path}
+			pw := plan.Window{Name: w.Name, Path: w.Path, Layout: w.Layout}
 			for _, p := range w.Panes {
 				pw.Panes = append(pw.Panes, plan.Pane{Path: p.Path, Command: p.Command})
 			}
@@ -185,7 +185,7 @@ func stateDiffToPlanDiff(sd state.Diff, desired *state.State) plan.Diff {
 }
 
 func stateWindowToPlanWindow(w state.Window) plan.Window {
-	pw := plan.Window{Name: w.Name, Path: w.Path}
+	pw := plan.Window{Name: w.Name, Path: w.Path, Layout: w.Layout}
 	for _, p := range w.Panes {
 		pw.Panes = append(pw.Panes, plan.Pane{Path: p.Path, Command: p.Command})
 	}
@@ -210,6 +210,8 @@ func planActionToTmuxAction(a plan.Action) tmux.Action {
 		return tmux.SplitPane{Target: action.Target, Path: action.Path}
 	case plan.SendKeysAction:
 		return tmux.SendKeys{Target: action.Target, Keys: action.Command}
+	case plan.SelectLayoutAction:
+		return tmux.SelectLayout{Target: action.Target, Layout: action.Layout}
 	case plan.KillSessionAction:
 		return tmux.KillSession{Name: action.Name}
 	case plan.KillWindowAction:

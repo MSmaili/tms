@@ -22,9 +22,10 @@ type Session struct {
 }
 
 type Window struct {
-	Name  string
-	Path  string
-	Panes []Pane
+	Name   string
+	Path   string
+	Layout string
+	Panes  []Pane
 }
 
 type Pane struct {
