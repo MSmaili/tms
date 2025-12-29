@@ -82,3 +82,13 @@ type SelectLayout struct {
 func (a SelectLayout) Args() []string {
 	return []string{"select-layout", "-t", a.Target, a.Layout}
 }
+
+type SetEnvironment struct {
+	Session string
+	Name    string
+	Value   string
+}
+
+func (a SetEnvironment) Args() []string {
+	return []string{"set-environment", "-t", a.Session, a.Name, a.Value}
+}
