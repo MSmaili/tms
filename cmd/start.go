@@ -25,9 +25,16 @@ var startCmd = &cobra.Command{
 }
 
 func init() {
-	startCmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print plan without executing")
-	startCmd.Flags().BoolVar(&force, "force", false, "Kill extra sessions/windows and recreate mismatched")
+	startCmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "Print plan without executing")
+	startCmd.Flags().BoolVarP(&force, "force", "f", false, "Kill extra sessions/windows and recreate mismatched")
 	rootCmd.AddCommand(startCmd)
+
+	startCmd.ValidArgsFunction = func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) > 0 {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return completeWorkspaceNames(cmd, args, toComplete)
+	}
 }
 
 func buildSetEnvActions(sessionNames []string, path string) []tmux.Action {
