@@ -31,6 +31,9 @@ func init() {
 	saveCmd.Flags().StringVarP(&savePath, "path", "p", "", "Path to save workspace file")
 	saveCmd.Flags().StringVarP(&saveName, "name", "n", "", "Name for the workspace")
 	saveCmd.Flags().BoolVar(&saveAll, "all", false, "Save all tmux sessions")
+
+	saveCmd.ValidArgs = []string{"."}
+	saveCmd.RegisterFlagCompletionFunc("name", completeWorkspaceNames)
 }
 
 func runSave(cmd *cobra.Command, args []string) error {
@@ -114,11 +117,11 @@ func determinePath(args []string, workspacePath string, requireExplicit bool) (s
 	}
 
 	if saveName != "" {
-		configDir, err := os.UserConfigDir()
+		configDir, err := manifest.GetConfigDir()
 		if err != nil {
 			return "", fmt.Errorf("getting config dir: %w", err)
 		}
-		return filepath.Join(configDir, "tms", "workspaces", saveName+".yaml"), nil
+		return filepath.Join(configDir, "workspaces", saveName+".yaml"), nil
 	}
 
 	if useDot {
