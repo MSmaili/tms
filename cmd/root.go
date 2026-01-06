@@ -7,6 +7,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	Version   = "dev"
+	GitCommit = "unknown"
+	BuildDate = "unknown"
+)
+
 var rootCmd = &cobra.Command{
 	Use:   "tms",
 	Short: "TMS - Tmux Session Manager",
@@ -17,6 +23,11 @@ It supports:
 - YAML and JSON configuration files
 - Named and local workspaces
 - Templates for reusable configurations`,
+	Version: Version,
+}
+
+func init() {
+	rootCmd.SetVersionTemplate(fmt.Sprintf("tms version %s\ncommit: %s\nbuilt: %s\n", Version, GitCommit, BuildDate))
 }
 
 func Execute() {
