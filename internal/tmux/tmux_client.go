@@ -188,3 +188,62 @@ func (c *TmuxClient) BaseWindowIndex() (int, error) {
 
 	return idx, nil
 }
+
+func (c *TmuxClient) SplitPane(session, window string, pane domain.Pane) error {
+	target := fmt.Sprintf("%s:%s", session, window)
+	args := []string{"split-window", "-t", target}
+
+	if pane.Split == "horizontal" {
+		args = append(args, "-v")
+	} else {
+		args = append(args, "-h")
+	}
+
+	if pane.Size > 0 {
+		args = append(args, "-p", strconv.Itoa(pane.Size))
+	}
+
+	if pane.Path != "" {
+		args = append(args, "-c", pane.Path)
+	}
+
+	if pane.Command != "" {
+		args = append(args, pane.Command)
+	}
+
+	_, err := c.run(args...)
+	return err
+}
+
+func (c *TmuxClient) ListPanes(session, window string) ([]domain.Pane, error) {
+	target := fmt.Sprintf("%s:%s", session, window)
+	out, err := c.run(
+		"list-panes",
+		"-t", target,
+		"-F", "#{pane_current_path}|#{pane_current_command}",
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	lines := strings.Split(out, "\n")
+	panes := make([]domain.Pane, 0, len(lines))
+
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		parts := strings.Split(line, "|")
+		if len(parts) != 2 {
+			continue
+		}
+
+		panes = append(panes, domain.Pane{
+			Path:    parts[0],
+			Command: parts[1],
+		})
+	}
+
+	return panes, nil
+}
