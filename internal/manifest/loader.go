@@ -31,7 +31,7 @@ func (l *FileLoader) Load() (*Workspace, error) {
 
 	var raw Workspace
 	ext := filepath.Ext(extendedPath)
-	
+
 	switch ext {
 	case ".yaml", ".yml":
 		if err = yaml.Unmarshal(data, &raw); err != nil {
