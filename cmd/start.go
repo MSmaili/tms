@@ -10,14 +10,24 @@ import (
 )
 
 func Start(args []string) {
-	if len(args) == 0 {
-		fmt.Println("Usage: tmx start <config-path>")
+	var nameOrPath string
+	if len(args) > 0 {
+		nameOrPath = args[0]
+	}
+
+	resolver := manifest.NewResolver()
+	workspacePath, err := resolver.Resolve(nameOrPath)
+	if err != nil {
+		if nameOrPath == "" {
+			fmt.Println("No workspace specified and no .tms.yaml found in current directory")
+			fmt.Println("Usage: tmx start [workspace-name-or-path]")
+		} else {
+			fmt.Println("Error:", err)
+		}
 		os.Exit(1)
 	}
 
-	configPath := args[0]
-
-	c := manifest.NewFileLoader(configPath)
+	c := manifest.NewFileLoader(workspacePath)
 
 	sessions, err := c.Load()
 	if err != nil {
