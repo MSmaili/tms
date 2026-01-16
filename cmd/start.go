@@ -2,14 +2,30 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/MSmaili/tmx/internal/domain"
 	"github.com/MSmaili/tmx/internal/manifest"
 	"github.com/MSmaili/tmx/internal/tmux"
+	"github.com/spf13/cobra"
 )
 
-func Start(args []string) {
+var startCmd = &cobra.Command{
+	Use:   "start [workspace-name-or-path]",
+	Short: "Start a tmux workspace",
+	Long: `Start a tmux workspace from a configuration file.
+
+You can specify:
+- A workspace name (looks in ~/.config/tms/workspaces/)
+- A file path (./workspace.yaml or /path/to/workspace.yaml)
+- Nothing (looks for .tms.yaml in current directory)`,
+	RunE: runStart,
+}
+
+func init() {
+	rootCmd.AddCommand(startCmd)
+}
+
+func runStart(cmd *cobra.Command, args []string) error {
 	var nameOrPath string
 	if len(args) > 0 {
 		nameOrPath = args[0]
@@ -20,129 +36,128 @@ func Start(args []string) {
 	if err != nil {
 		if nameOrPath == "" {
 			fmt.Println("No workspace specified and no .tms.yaml found in current directory")
-			fmt.Println("Usage: tmx start [workspace-name-or-path]")
+			fmt.Println("Usage: tms start [workspace-name-or-path]")
 		} else {
 			fmt.Println("Error:", err)
 		}
-		os.Exit(1)
+		return err
 	}
 
 	c := manifest.NewFileLoader(workspacePath)
 
 	sessions, err := c.Load()
 	if err != nil {
-		fmt.Println("Error:", err)
-		os.Exit(1)
+		return fmt.Errorf("loading workspace: %w", err)
 	}
 
 	tmx, err := tmux.New()
-
 	if err != nil {
-		fmt.Println("Error:", err)
-		os.Exit(1)
+		return fmt.Errorf("initializing tmux client: %w", err)
 	}
 
 	basePaneIndex, err := tmx.BasePaneIndex()
 	if err != nil {
-		fmt.Println("Error getting pane base index:", err)
-		os.Exit(1)
+		return fmt.Errorf("getting pane base index: %w", err)
 	}
 
-	f, err := createSessions(sessions, tmx, basePaneIndex)
-
+	firstSession, err := createSessions(sessions, tmx, basePaneIndex)
 	if err != nil {
-		fmt.Println("Error:", err)
-		os.Exit(1)
+		return fmt.Errorf("creating sessions: %w", err)
 	}
 
-	err = tmx.Attach(f)
-
-	if err != nil {
-		fmt.Println("Error:", err)
-		os.Exit(1)
+	if err := tmx.Attach(firstSession); err != nil {
+		return fmt.Errorf("attaching to session: %w", err)
 	}
+
+	return nil
 }
 
-func createSessions(c *manifest.Workspace, tmx *tmux.TmuxClient, basePaneIndex int) (string, error) {
-	var defaultSession string
-	for session, windows := range c.Sessions {
-		if len(defaultSession) == 0 {
-			defaultSession = session
+func createSessions(workspace *manifest.Workspace, tmx *tmux.TmuxClient, basePaneIndex int) (string, error) {
+	var firstSession string
+
+	for sessionName, windows := range workspace.Sessions {
+		if firstSession == "" {
+			firstSession = sessionName
 		}
 
-		var window domain.Window
-		if len(windows) > 0 {
-			window = windows[0]
-		}
-
-		windowForCreation := window
-		windowForCreation.Command = ""
-
-		err := tmx.CreateSession(session, &windowForCreation)
-		if err != nil {
-			return "", err
-		}
-
-		if len(window.Panes) > 0 {
-			if err := createPanes(tmx, session, window.Name, windows[0], basePaneIndex); err != nil {
-				return "", fmt.Errorf("create panes for window %s: %w", window.Name, err)
-			}
-		} else if window.Command != "" {
-			// Single pane with command
-			if err := tmx.SendKeys(session, window.Name, basePaneIndex, window.Command); err != nil {
-				return "", fmt.Errorf("send keys to window %s: %w", window.Name, err)
-			}
-		}
-
-		for i := 1; i < len(windows); i++ {
-			wo := windows[i]
-
-			windowForCreation := wo
-			windowForCreation.Command = ""
-
-			err := tmx.CreateWindow(session, wo.Name, windowForCreation)
-			if err != nil {
-				return "", err
-			}
-
-			if len(wo.Panes) > 0 {
-				if err := createPanes(tmx, session, wo.Name, windows[i], basePaneIndex); err != nil {
-					return "", fmt.Errorf("create panes for window %s: %w", wo.Name, err)
-				}
-			} else if wo.Command != "" {
-				if err := tmx.SendKeys(session, wo.Name, basePaneIndex, wo.Command); err != nil {
-					return "", fmt.Errorf("send keys to window %s: %w", wo.Name, err)
-				}
-			}
+		if err := createSession(tmx, sessionName, windows, basePaneIndex); err != nil {
+			return "", fmt.Errorf("session %s: %w", sessionName, err)
 		}
 	}
 
-	return defaultSession, nil
+	return firstSession, nil
 }
 
-func createPanes(tmx *tmux.TmuxClient, session, window string, w domain.Window, basePaneIndex int) error {
-	if len(w.Panes) == 0 {
-		return nil
+func createSession(tmx *tmux.TmuxClient, sessionName string, windows []domain.Window, basePaneIndex int) error {
+	if len(windows) == 0 {
+		return fmt.Errorf("no windows defined")
 	}
 
-	if w.Panes[0].Command != "" {
-		if err := tmx.SendKeys(session, window, basePaneIndex, w.Panes[0].Command); err != nil {
-			return fmt.Errorf("send keys to pane %d: %w", basePaneIndex, err)
+	createFirst := func(w domain.Window) error {
+		return tmx.CreateSession(sessionName, &w)
+	}
+	if err := createWindow(createFirst, tmx, sessionName, windows[0], basePaneIndex); err != nil {
+		return fmt.Errorf("window %s: %w", windows[0].Name, err)
+	}
+
+	for i := 1; i < len(windows); i++ {
+		createAdditional := func(w domain.Window) error {
+			return tmx.CreateWindow(sessionName, w.Name, w)
+		}
+		if err := createWindow(createAdditional, tmx, sessionName, windows[i], basePaneIndex); err != nil {
+			return fmt.Errorf("window %s: %w", windows[i].Name, err)
 		}
 	}
 
-	for i := 1; i < len(w.Panes); i++ {
-		pane := w.Panes[i]
-		if err := tmx.SplitPane(session, window, pane); err != nil {
-			return fmt.Errorf("split pane %d: %w", i, err)
-		}
+	return nil
+}
 
-		if pane.Command != "" {
-			paneIndex := basePaneIndex + i
-			if err := tmx.SendKeys(session, window, paneIndex, pane.Command); err != nil {
-				return fmt.Errorf("send keys to pane %d: %w", paneIndex, err)
-			}
+func createWindow(create func(domain.Window) error, tmx *tmux.TmuxClient, sessionName string, window domain.Window, basePaneIndex int) error {
+	windowForCreate := window
+	windowForCreate.Command = ""
+
+	if err := create(windowForCreate); err != nil {
+		return err
+	}
+
+	return setupWindow(tmx, sessionName, window, basePaneIndex)
+}
+
+func setupWindow(tmx *tmux.TmuxClient, sessionName string, window domain.Window, basePaneIndex int) error {
+	if len(window.Panes) > 0 {
+		return setupPanes(tmx, sessionName, window.Name, window.Panes, basePaneIndex)
+	}
+
+	if window.Command != "" {
+		return tmx.SendKeys(sessionName, window.Name, basePaneIndex, window.Command)
+	}
+
+	return nil
+}
+
+func setupPanes(tmx *tmux.TmuxClient, sessionName, windowName string, panes []domain.Pane, basePaneIndex int) error {
+	if panes[0].Command != "" {
+		if err := tmx.SendKeys(sessionName, windowName, basePaneIndex, panes[0].Command); err != nil {
+			return fmt.Errorf("pane 0: %w", err)
 		}
+	}
+
+	for i := 1; i < len(panes); i++ {
+		if err := createPane(tmx, sessionName, windowName, panes[i], basePaneIndex+i); err != nil {
+			return fmt.Errorf("pane %d: %w", i, err)
+		}
+	}
+
+	return nil
+}
+
+func createPane(tmx *tmux.TmuxClient, sessionName, windowName string, pane domain.Pane, paneIndex int) error {
+	if err := tmx.SplitPane(sessionName, windowName, pane); err != nil {
+		return err
+	}
+
+	if pane.Command != "" {
+		return tmx.SendKeys(sessionName, windowName, paneIndex, pane.Command)
 	}
 
 	return nil

@@ -3,32 +3,25 @@ package cmd
 import (
 	"fmt"
 	"os"
+
+	"github.com/spf13/cobra"
 )
 
-func Execute() {
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: tmuxctl <command> [args]")
-		os.Exit(1)
-	}
+var rootCmd = &cobra.Command{
+	Use:   "tms",
+	Short: "TMS - Tmux Session Manager",
+	Long: `TMS is a powerful tmux session manager that helps you manage complex tmux sessions with ease.
 
-	switch os.Args[1] {
-	case "start":
-		Start(os.Args[2:])
-	// case "switch":
-	// 	SwitchCmd(os.Args[2:])
-	// case "list":
-	// 	ListCmd(os.Args[2:])
-	// case "load":
-	// 	LoadCmd(os.Args[2:])
-	case "create":
-		Test(os.Args[2:])
-	default:
-		fmt.Println("Unknown command:", os.Args[1])
-		os.Exit(1)
-	}
+It supports:
+- Multiple sessions and windows with panes
+- YAML and JSON configuration files
+- Named and local workspaces
+- Templates for reusable configurations`,
 }
 
-func Test(flags []string) {
-	fmt.Println("test")
-	fmt.Println(flags)
+func Execute() {
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }
