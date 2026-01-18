@@ -16,6 +16,10 @@ const (
 	installScriptURL = "https://raw.githubusercontent.com/MSmaili/tms/main/install.sh"
 )
 
+var (
+	updateFromSource bool
+)
+
 var updateCmd = &cobra.Command{
 	Use:   "update",
 	Short: "Update tms to the latest version",
@@ -24,10 +28,16 @@ var updateCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(updateCmd)
+	updateCmd.Flags().BoolVar(&updateFromSource, "source", false, "Build from source instead of using release")
 }
 
 func runUpdate(cmd *cobra.Command, args []string) error {
 	logger.Info("Updating tms...")
+
+	if updateFromSource {
+		logger.Debug("Forcing update from source")
+		return updateViaGo()
+	}
 
 	exePath, err := os.Executable()
 	if err != nil {
@@ -86,11 +96,12 @@ func updateViaGo() error {
 func updateViaScript() error {
 	logger.Info("Updating via install script...")
 
-	if err := runCommand(
-		"bash",
-		"-c",
-		fmt.Sprintf("curl -fsSL %s | bash", installScriptURL),
-	); err != nil {
+	scriptCmd := fmt.Sprintf("curl -fsSL %s | bash", installScriptURL)
+	if updateFromSource {
+		scriptCmd = fmt.Sprintf("curl -fsSL %s | TMS_FROM_SOURCE=1 bash", installScriptURL)
+	}
+
+	if err := runCommand("bash", "-c", scriptCmd); err != nil {
 		return fmt.Errorf("script update failed: %w", err)
 	}
 

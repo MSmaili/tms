@@ -112,13 +112,15 @@ check_tmux() {
 
 # Main installation
 main() {
-    info "Installing TMS from source..."
-
     detect_platform
     check_tmux
 
-    # Install from source (development mode)
-    install_from_source
+    # Check if forced to install from source
+    if [ -n "$TMS_FROM_SOURCE" ]; then
+        install_from_source
+    else
+        install_from_release
+    fi
 
     # Verify installation
     if command -v tms >/dev/null 2>&1; then
