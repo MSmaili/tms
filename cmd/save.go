@@ -84,17 +84,17 @@ func getTargetSessions(client tmux.Client) ([]tmux.Session, string, error) {
 }
 
 func findCurrentSession(result tmux.LoadStateResult) ([]tmux.Session, string, error) {
-	if result.CurrentSession == "" {
+	if result.Active.Session == "" {
 		return nil, "", fmt.Errorf("not in a tmux session\nHint: Run this command from inside tmux, or use --all with -p/-n/.")
 	}
 
 	for _, s := range result.Sessions {
-		if s.Name == result.CurrentSession {
+		if s.Name == result.Active.Session {
 			return []tmux.Session{s}, s.WorkspacePath, nil
 		}
 	}
 
-	return nil, "", fmt.Errorf("session %q not found", result.CurrentSession)
+	return nil, "", fmt.Errorf("session %q not found", result.Active.Session)
 }
 
 func determineSavePath(args []string, existingPath string) (string, error) {

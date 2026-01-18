@@ -39,6 +39,7 @@ var (
 	listFormat    string
 	listDelimiter string
 	listCurrent   bool
+	listMarker    string
 )
 
 func init() {
@@ -49,6 +50,7 @@ func init() {
 	listCmd.Flags().StringVarP(&listFormat, "format", "f", "flat", "Output format: flat, indent, tree, json")
 	listCmd.Flags().StringVarP(&listDelimiter, "delimiter", "d", ":", "Delimiter for flat output")
 	listCmd.Flags().BoolVarP(&listCurrent, "current", "c", false, "Only show current session")
+	listCmd.Flags().StringVarP(&listMarker, "marker", "m", "", "Prefix for current session/window (e.g. '➤ ')")
 
 	listCmd.ValidArgs = []string{"workspaces", "sessions"}
 	listCmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -62,8 +64,9 @@ type listItem struct {
 }
 
 type listWindow struct {
-	Name  string
-	Panes []int
+	Name       string
+	Panes      []int
+	ActivePane int
 }
 
 type jsonSession struct {
@@ -103,6 +106,9 @@ func validateListFlags(mode string) error {
 		}
 		if listCurrent {
 			return fmt.Errorf("--current only works with sessions\nExample: muxie list sessions --current")
+		}
+		if listMarker != "" {
+			return fmt.Errorf("--marker only works with sessions\nExample: muxie list sessions --marker '➤ '")
 		}
 	}
 	if listPanes && !listWindows {
@@ -178,11 +184,11 @@ func listTmuxSessions() error {
 	sessions := result.Sessions
 
 	if listCurrent {
-		if result.CurrentSession == "" {
+		if result.Active.Session == "" {
 			return fmt.Errorf("not in a tmux session")
 		}
 		for _, sess := range sessions {
-			if sess.Name == result.CurrentSession {
+			if sess.Name == result.Active.Session {
 				sessions = []tmux.Session{sess}
 				break
 			}
@@ -191,7 +197,7 @@ func listTmuxSessions() error {
 
 	items := make([]listItem, len(sessions))
 	for i, sess := range sessions {
-		items[i] = sessionToItem(sess)
+		items[i] = sessionToItem(sess, result.Active, result.PaneBaseIndex)
 	}
 
 	return outputItems(items)
@@ -220,20 +226,37 @@ func workspaceToItems(name string, ws *manifest.Workspace) []listItem {
 	return items
 }
 
-func sessionToItem(sess tmux.Session) listItem {
-	item := listItem{Name: sess.Name}
+func sessionToItem(sess tmux.Session, active tmux.ActiveContext, paneBaseIndex int) listItem {
+	item := listItem{Name: applyMarker(sess.Name, sess.Name == active.Session && !listWindows)}
+
 	if listWindows {
 		for _, win := range sess.Windows {
-			lw := listWindow{Name: win.Name}
+			isActiveWindow := sess.Name == active.Session && win.Name == active.Window
+			lw := listWindow{
+				Name:       applyMarker(win.Name, isActiveWindow && !listPanes),
+				ActivePane: -1,
+			}
+
 			if listPanes {
-				for p := range win.Panes {
-					lw.Panes = append(lw.Panes, p)
+				if isActiveWindow {
+					lw.ActivePane = active.Pane
+				}
+				for i := range len(win.Panes) {
+					paneIndex := paneBaseIndex + i
+					lw.Panes = append(lw.Panes, paneIndex)
 				}
 			}
 			item.Windows = append(item.Windows, lw)
 		}
 	}
 	return item
+}
+
+func applyMarker(name string, isActive bool) string {
+	if listMarker != "" && isActive {
+		return listMarker + name
+	}
+	return name
 }
 
 func outputItems(items []listItem) error {
@@ -304,12 +327,26 @@ func (f *formatter) printFlat(item listItem) {
 		return
 	}
 	for _, win := range item.Windows {
+		line := fmt.Sprintf("%s%s%s", item.Name, d, win.Name)
+
+		if listMarker != "" && strings.HasPrefix(win.Name, listMarker) {
+			cleanName := strings.TrimPrefix(win.Name, listMarker)
+			line = listMarker + fmt.Sprintf("%s%s%s", item.Name, d, cleanName)
+		}
+
 		if len(win.Panes) == 0 {
-			fmt.Printf("%s%s%s\n", item.Name, d, win.Name)
+			fmt.Println(line)
 			continue
 		}
 		for _, p := range win.Panes {
-			fmt.Printf("%s%s%s%s%d\n", item.Name, d, win.Name, d, p)
+			paneStr := fmt.Sprintf("%s%s%d", line, d, p)
+
+			if listMarker != "" && win.ActivePane == p {
+				cleanLine := strings.TrimPrefix(line, listMarker)
+				paneStr = listMarker + fmt.Sprintf("%s%s%d", cleanLine, d, p)
+			}
+
+			fmt.Println(paneStr)
 		}
 	}
 }

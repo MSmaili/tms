@@ -18,9 +18,16 @@ type Session struct {
 }
 
 type LoadStateResult struct {
-	Sessions       []Session
-	CurrentSession string
-	PaneBaseIndex  int
+	Sessions      []Session
+	Active        ActiveContext
+	PaneBaseIndex int
+}
+
+type ActiveContext struct {
+	Session string
+	Window  string
+	Pane    int
+	Path    string
 }
 
 type LoadStateQuery struct{}
@@ -28,7 +35,7 @@ type LoadStateQuery struct{}
 func (q LoadStateQuery) Args() []string {
 	return []string{
 		"list-panes", "-a",
-		"-F", "#{session_id}|#{session_name}|#{window_name}|#{pane_current_path}|#{pane_current_command}|#{MUXIE_WORKSPACE_PATH}",
+		"-F", "#{session_id}|#{session_name}|#{window_name}|#{window_active}|#{pane_index}|#{pane_active}|#{pane_current_path}|#{pane_current_command}|#{MUXIE_WORKSPACE_PATH}",
 		";", "show-options", "-gv", "pane-base-index",
 	}
 }
@@ -58,7 +65,11 @@ func (q LoadStateQuery) Parse(output string) (LoadStateResult, error) {
 }
 
 type paneLine struct {
-	sessionID, sessionName, windowName, panePath, paneCmd, workspaceEnvPath string
+	sessionID, sessionName, windowName  string
+	windowActive                        bool
+	paneIndex                           int
+	paneActive                          bool
+	panePath, paneCmd, workspaceEnvPath string
 }
 
 func parsePaneLine(line string) (paneLine, bool) {
@@ -69,6 +80,8 @@ func parsePaneLine(line string) (paneLine, bool) {
 
 	var p paneLine
 	var ok bool
+	var windowActiveStr, paneIndexStr, paneActiveStr string
+
 	if p.sessionID, line, ok = strings.Cut(line, "|"); !ok {
 		return paneLine{}, false
 	}
@@ -78,6 +91,21 @@ func parsePaneLine(line string) (paneLine, bool) {
 	if p.windowName, line, ok = strings.Cut(line, "|"); !ok {
 		return paneLine{}, false
 	}
+	if windowActiveStr, line, ok = strings.Cut(line, "|"); !ok {
+		return paneLine{}, false
+	}
+	p.windowActive = windowActiveStr == "1"
+
+	if paneIndexStr, line, ok = strings.Cut(line, "|"); !ok {
+		return paneLine{}, false
+	}
+	fmt.Sscanf(paneIndexStr, "%d", &p.paneIndex)
+
+	if paneActiveStr, line, ok = strings.Cut(line, "|"); !ok {
+		return paneLine{}, false
+	}
+	p.paneActive = paneActiveStr == "1"
+
 	if p.panePath, line, ok = strings.Cut(line, "|"); !ok {
 		return paneLine{}, false
 	}
@@ -86,8 +114,8 @@ func parsePaneLine(line string) (paneLine, bool) {
 }
 
 type stateBuilder struct {
-	sessions       map[string]*Session
-	currentSession string
+	sessions map[string]*Session
+	active   ActiveContext
 }
 
 func newStateBuilder() *stateBuilder {
@@ -96,7 +124,14 @@ func newStateBuilder() *stateBuilder {
 
 func (b *stateBuilder) addPane(p paneLine, currentID string) {
 	if p.sessionID == currentID {
-		b.currentSession = p.sessionName
+		b.active.Session = p.sessionName
+		if p.windowActive {
+			b.active.Window = p.windowName
+		}
+		if p.paneActive {
+			b.active.Pane = p.paneIndex
+			b.active.Path = p.panePath
+		}
 	}
 
 	sess := b.getOrCreateSession(p.sessionName, p.workspaceEnvPath)
@@ -128,7 +163,7 @@ func (b *stateBuilder) result() LoadStateResult {
 	for _, s := range b.sessions {
 		sessions = append(sessions, *s)
 	}
-	return LoadStateResult{Sessions: sessions, CurrentSession: b.currentSession}
+	return LoadStateResult{Sessions: sessions, Active: b.active}
 }
 
 func getCurrentSessionID() string {

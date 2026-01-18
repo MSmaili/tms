@@ -53,7 +53,7 @@ func TestRunQuery(t *testing.T) {
 	}{
 		{
 			name:   "success",
-			output: "$1|dev|editor|~/code|vim|\n0",
+			output: "$1|dev|editor|1|0|1|~/code|vim|\n0",
 			want: LoadStateResult{
 				Sessions:      []Session{{Name: "dev", Windows: []Window{{Name: "editor", Path: "~/code", Panes: []Pane{{Path: "~/code", Command: "vim"}}}}}},
 				PaneBaseIndex: 0,
