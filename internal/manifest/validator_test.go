@@ -7,10 +7,13 @@ import (
 
 func TestValidate_ValidWorkspace(t *testing.T) {
 	ws := &Workspace{
-		Sessions: map[string]WindowList{
-			"dev": {
-				{Name: "editor", Path: "/home/user"},
-				{Name: "terminal", Path: "/home/user"},
+		Sessions: []Session{
+			{
+				Name: "dev",
+				Windows: []Window{
+					{Name: "editor", Path: "/home/user"},
+					{Name: "terminal", Path: "/home/user"},
+				},
 			},
 		},
 	}
@@ -33,7 +36,7 @@ func TestValidate_NilWorkspace(t *testing.T) {
 
 func TestValidate_EmptySessions(t *testing.T) {
 	ws := &Workspace{
-		Sessions: map[string]WindowList{},
+		Sessions: []Session{},
 	}
 
 	errs := Validate(ws)
@@ -47,9 +50,10 @@ func TestValidate_EmptySessions(t *testing.T) {
 
 func TestValidate_EmptySessionName(t *testing.T) {
 	ws := &Workspace{
-		Sessions: map[string]WindowList{
-			"": {
-				{Name: "editor"},
+		Sessions: []Session{
+			{
+				Name:    "",
+				Windows: []Window{{Name: "editor", Path: "/home"}},
 			},
 		},
 	}
@@ -65,8 +69,8 @@ func TestValidate_EmptySessionName(t *testing.T) {
 
 func TestValidate_EmptyWindowList(t *testing.T) {
 	ws := &Workspace{
-		Sessions: map[string]WindowList{
-			"dev": {},
+		Sessions: []Session{
+			{Name: "dev", Windows: []Window{}},
 		},
 	}
 
@@ -81,10 +85,13 @@ func TestValidate_EmptyWindowList(t *testing.T) {
 
 func TestValidate_DuplicateWindowNames(t *testing.T) {
 	ws := &Workspace{
-		Sessions: map[string]WindowList{
-			"dev": {
-				{Name: "editor"},
-				{Name: "editor"},
+		Sessions: []Session{
+			{
+				Name: "dev",
+				Windows: []Window{
+					{Name: "editor", Path: "/home"},
+					{Name: "editor", Path: "/home"},
+				},
 			},
 		},
 	}
@@ -105,28 +112,39 @@ func TestValidate_DuplicateWindowNames(t *testing.T) {
 	}
 }
 
-func TestValidate_MultipleErrors(t *testing.T) {
+func TestValidate_DuplicateSessionNames(t *testing.T) {
 	ws := &Workspace{
-		Sessions: map[string]WindowList{
-			"dev": {},
-			"":    {{Name: "test"}},
+		Sessions: []Session{
+			{Name: "dev", Windows: []Window{{Name: "a", Path: "/home"}}},
+			{Name: "dev", Windows: []Window{{Name: "b", Path: "/home"}}},
 		},
 	}
 
 	errs := Validate(ws)
 	if len(errs) == 0 {
-		t.Error("expected error for multiple validation issues")
+		t.Error("expected error for duplicate session names")
 	}
-	if len(errs) < 2 {
-		t.Errorf("expected multiple errors, got: %v", errs)
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e.Message, "duplicate session name") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'duplicate session name' in errors, got: %v", errs)
 	}
 }
+
 func TestValidate_WindowsWithoutNames(t *testing.T) {
 	ws := &Workspace{
-		Sessions: map[string]WindowList{
-			"dev": {
-				{Path: "/home/user"},
-				{Path: "/home/user"},
+		Sessions: []Session{
+			{
+				Name: "dev",
+				Windows: []Window{
+					{Path: "/home/user"},
+					{Path: "/home/other"},
+				},
 			},
 		},
 	}
@@ -139,13 +157,17 @@ func TestValidate_WindowsWithoutNames(t *testing.T) {
 
 func TestValidate_MultipleZoomedPanes(t *testing.T) {
 	ws := &Workspace{
-		Sessions: map[string]WindowList{
-			"dev": {
-				{
-					Name: "editor",
-					Panes: []Pane{
-						{Path: "/home/user", Zoom: true},
-						{Path: "/home/user", Zoom: true},
+		Sessions: []Session{
+			{
+				Name: "dev",
+				Windows: []Window{
+					{
+						Name: "editor",
+						Path: "/home",
+						Panes: []Pane{
+							{Path: "/home/user", Zoom: true},
+							{Path: "/home/user", Zoom: true},
+						},
 					},
 				},
 			},
@@ -170,13 +192,17 @@ func TestValidate_MultipleZoomedPanes(t *testing.T) {
 
 func TestValidate_SingleZoomedPane(t *testing.T) {
 	ws := &Workspace{
-		Sessions: map[string]WindowList{
-			"dev": {
-				{
-					Name: "editor",
-					Panes: []Pane{
-						{Path: "/home/user", Zoom: true},
-						{Path: "/home/user"},
+		Sessions: []Session{
+			{
+				Name: "dev",
+				Windows: []Window{
+					{
+						Name: "editor",
+						Path: "/home",
+						Panes: []Pane{
+							{Path: "/home/user", Zoom: true},
+							{Path: "/home/user"},
+						},
 					},
 				},
 			},
