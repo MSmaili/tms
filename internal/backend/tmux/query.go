@@ -21,9 +21,8 @@ func RunQuery[T any](c Client, q Query[T]) (T, error) {
 }
 
 type Session struct {
-	Name          string
-	WorkspacePath string
-	Windows       []Window
+	Name    string
+	Windows []Window
 }
 
 type LoadStateResult struct {
@@ -44,7 +43,7 @@ type LoadStateQuery struct{}
 func (q LoadStateQuery) Args() []string {
 	return []string{
 		"list-panes", "-a",
-		"-F", "#{session_id}|#{session_name}|#{window_name}|#{window_active}|#{pane_index}|#{pane_active}|#{pane_current_path}|#{pane_current_command}|#{MUXIE_WORKSPACE_PATH}",
+		"-F", "#{session_id}|#{session_name}|#{window_name}|#{window_active}|#{pane_index}|#{pane_active}|#{pane_current_path}|#{pane_current_command}",
 		";", "show-options", "-gv", "pane-base-index",
 	}
 }
@@ -74,11 +73,11 @@ func (q LoadStateQuery) Parse(output string) (LoadStateResult, error) {
 }
 
 type paneLine struct {
-	sessionID, sessionName, windowName  string
-	windowActive                        bool
-	paneIndex                           int
-	paneActive                          bool
-	panePath, paneCmd, workspaceEnvPath string
+	sessionID, sessionName, windowName string
+	windowActive                       bool
+	paneIndex                          int
+	paneActive                         bool
+	panePath, paneCmd                  string
 }
 
 func parsePaneLine(line string) (paneLine, bool) {
@@ -118,7 +117,7 @@ func parsePaneLine(line string) (paneLine, bool) {
 	if p.panePath, line, ok = strings.Cut(line, "|"); !ok {
 		return paneLine{}, false
 	}
-	p.paneCmd, p.workspaceEnvPath, _ = strings.Cut(line, "|")
+	p.paneCmd = line
 	return p, true
 }
 
@@ -143,16 +142,16 @@ func (b *stateBuilder) addPane(p paneLine, currentID string) {
 		}
 	}
 
-	sess := b.getOrCreateSession(p.sessionName, p.workspaceEnvPath)
+	sess := b.getOrCreateSession(p.sessionName)
 	win := b.getOrCreateWindow(sess, p.windowName, p.panePath)
 	win.Panes = append(win.Panes, Pane{Path: p.panePath, Command: p.paneCmd})
 }
 
-func (b *stateBuilder) getOrCreateSession(name, workspacePath string) *Session {
+func (b *stateBuilder) getOrCreateSession(name string) *Session {
 	if sess, ok := b.sessions[name]; ok {
 		return sess
 	}
-	sess := &Session{Name: name, WorkspacePath: workspacePath}
+	sess := &Session{Name: name}
 	b.sessions[name] = sess
 	return sess
 }
